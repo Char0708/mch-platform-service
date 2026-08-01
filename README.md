@@ -4,7 +4,7 @@ Minimal non-business engineering sample for the service platform of the maternal
 
 ## Included
 
-- Java 21 and Spring Boot 4.1.0.RELEASE
+- Java 21 and Spring Boot 4.1.0
 - Spring Modulith structure verification
 - Actuator health/info infrastructure endpoints
 - Flyway and MySQL 8.4/InnoDB structural migration probe
@@ -22,6 +22,6 @@ pwsh -NoLogo -NoProfile -File scripts/verify-engineering-boundaries.ps1
 bash ./mvnw -B --no-transfer-progress verify
 ```
 
-The Maven verification requires Docker because the test context uses an ephemeral `mysql:8.4` container. The current workstation lacks Java and Docker, so the runnable proof is delegated to the repository CI after the initial push.
+The Maven verification requires Docker because the test context uses an ephemeral `mysql:8.4` container. The current workstation lacks Java and Docker; GitHub Actions has run the sample successfully with one Flyway structural migration and three passing tests.
 
-The current technical owner is `@Char0708`; backup and independent review remain unresolved admission items. See [ownership](./docs/OWNERSHIP.md) and the [ENV-2 boundary](./docs/ENV-2.md).
+The current technical owner is `@Char0708`; backup and independent review remain unresolved admission items. See [ownership](./docs/OWNERSHIP.md), the [ENV-2 boundary](./docs/ENV-2.md), and the [main branch target gate](./docs/BRANCH-PROTECTION.md).
