@@ -103,8 +103,8 @@ public class PublicIdentityService {
 		auditService.success("PUBLIC_IDENTITY_SESSION_ISSUED", person.personId(), NaturalPersonActor.PRINCIPAL_TYPE,
 				"ESTABLISH_PUBLIC_IDENTITY_SESSION", "NATURAL_PERSON", person.personId(), null, "ACTIVE",
 				null, null, requestId);
-		return new IdentitySessionResult(person.personId(), tokenCodec.issue(sessionId),
-				NaturalPersonActor.PRINCIPAL_TYPE, person.profileStatus(), person.subjectId(),
+		return new IdentitySessionResult(person.personId(), Identifiers.userDisplayId(person.personId()),
+				tokenCodec.issue(sessionId), NaturalPersonActor.PRINCIPAL_TYPE, person.profileStatus(), person.subjectId(),
 				person.displayName(), ageYears, true);
 	}
 
@@ -159,8 +159,9 @@ public class PublicIdentityService {
 		return new ApiException(HttpStatus.UNAUTHORIZED, "AUTHENTICATION_FAILED", "身份上下文无法验证。");
 	}
 
-	public record IdentitySessionResult(String personId, String sessionToken, String principalType,
-			String profileStatus, String subjectId, String displayName, int ageYears, boolean synthetic) {
+	public record IdentitySessionResult(String personId, String userDisplayId, String sessionToken,
+			String principalType, String profileStatus, String subjectId, String displayName,
+			int ageYears, boolean synthetic) {
 	}
 
 	private record PersonRow(String personId, String profileStatus, String displayName,

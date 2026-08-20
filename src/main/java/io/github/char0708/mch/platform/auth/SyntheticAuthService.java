@@ -76,7 +76,8 @@ public class SyntheticAuthService {
 		idempotencyService.record("PUBLIC_LOGIN", SESSION_ENDPOINT, key, payloadHash, "SESSION", sessionId, 201, now);
 		auditService.success("LOGIN_SUCCEEDED", account.accountId(), account.role().name(), "LOGIN",
 				"ACCOUNT", account.accountId(), null, null, null, null, requestId);
-		return new AuthResult(account.accountId(), tokenCodec.issue(sessionId), account.role(), account.profileStatus(), true);
+		return new AuthResult(account.accountId(), Identifiers.operationsAccountDisplayId(account.accountId()),
+				tokenCodec.issue(sessionId), account.role(), account.profileStatus(), true);
 	}
 
 	public SessionActor authenticate(HttpServletRequest request, AccountRole... allowedRoles) {
@@ -145,7 +146,8 @@ public class SyntheticAuthService {
 				""")
 				.param("sessionId", sessionId)
 				.query((resultSet, rowNumber) -> new AuthResult(resultSet.getString("account_id"),
-						tokenCodec.issue(sessionId), AccountRole.valueOf(resultSet.getString("account_type")),
+						Identifiers.operationsAccountDisplayId(resultSet.getString("account_id")), tokenCodec.issue(sessionId),
+						AccountRole.valueOf(resultSet.getString("account_type")),
 						resultSet.getString("profile_status"), true))
 				.optional()
 				.orElseThrow(() -> new ApiException(HttpStatus.CONFLICT, "IDEMPOTENCY_KEY_REUSED",
@@ -167,8 +169,8 @@ public class SyntheticAuthService {
 	public record LoginCommand(String username, String password) {
 	}
 
-	public record AuthResult(String accountId, String sessionToken, AccountRole role, String profileStatus,
-			boolean synthetic) {
+	public record AuthResult(String accountId, String accountDisplayId, String sessionToken, AccountRole role,
+			String profileStatus, boolean synthetic) {
 	}
 
 	private record AccountRow(String accountId, String passwordHash, AccountRole role, String profileStatus) {

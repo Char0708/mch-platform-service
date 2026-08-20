@@ -93,6 +93,22 @@ class ServiceContractIntegrationTests {
 	}
 
 	@Test
+	void shortDisplayIdentifiersDoNotReplaceInternalKeys() throws Exception {
+		Member member = defaultPerson();
+		Operator editor = operator(AccountRole.CONTENT_EDITOR);
+		Operator reviewer = operator(AccountRole.CONTENT_REVIEWER);
+		Operator admin = operator(AccountRole.PLATFORM_ADMIN);
+
+		assertAll(
+				() -> assertThat(member.personId()).isEqualTo(DEFAULT_PERSON_ID).hasSize(32),
+				() -> assertThat(member.displayId()).isEqualTo("U000001"),
+				() -> assertThat(editor.accountId()).hasSize(32),
+				() -> assertThat(editor.displayId()).isEqualTo("OP" + editor.accountId().substring(28).toUpperCase()),
+				() -> assertThat(reviewer.displayId()).isEqualTo("OP" + reviewer.accountId().substring(28).toUpperCase()),
+				() -> assertThat(admin.displayId()).isEqualTo("OP" + admin.accountId().substring(28).toUpperCase()));
+	}
+
+	@Test
 	void auto001NormalServiceVerticalSlicePublishingAndWeight() throws Exception {
 		Operator editor = operator(AccountRole.CONTENT_EDITOR);
 		Operator reviewer = operator(AccountRole.CONTENT_REVIEWER);
@@ -124,28 +140,38 @@ class ServiceContractIntegrationTests {
 	}
 
 	@Test
-	void r1HomeReturnsOnlyTheCurrentGestationalDaysPublishedBabyAndMomChanges() throws Exception {
+	void r1HomeUsesClinicianDueDateForAuthoritativeD6DatingAndContents() throws Exception {
 		Operator editor = operator(AccountRole.CONTENT_EDITOR);
 		Operator reviewer = operator(AccountRole.CONTENT_REVIEWER);
 		PublishedContent currentBaby = publishContentAtSlot(editor, reviewer,
-				"20周第4天宝宝变化", "纯合成宝宝变化内容，用于当前孕周日首页展示。", "P20D3_BABY_CHANGE");
+				"20周第7天宝宝变化", "纯合成宝宝变化内容，用于当前孕周日首页展示。", "P20D6_BABY_CHANGE");
 		PublishedContent currentMom = publishContentAtSlot(editor, reviewer,
-				"20周第4天妈妈变化", "纯合成妈妈变化内容，用于当前孕周日首页展示。", "P20D3_MOM_CHANGE");
-		publishContentAtSlot(editor, reviewer,
-				"20周第3天宝宝变化", "纯合成其他日期内容，不应出现在当前首页。", "P20D2_BABY_CHANGE");
+				"20周第7天妈妈变化", "纯合成妈妈变化内容，用于当前孕周日首页展示。", "P20D6_MOM_CHANGE");
+		PublishedContent staleBaby = publishContentAtSlot(editor, reviewer,
+				"20周第4天宝宝变化", "纯合成其他日期宝宝内容，不应出现在当前首页。", "P20D3_BABY_CHANGE");
+		PublishedContent staleMom = publishContentAtSlot(editor, reviewer,
+				"20周第4天妈妈变化", "纯合成其他日期妈妈内容，不应出现在当前首页。", "P20D3_MOM_CHANGE");
 
 		Member member = defaultPerson();
-		createProfile(member, "SYNTHETIC_HOME_DAILY");
+		Map<String, Object> profile = profilePayload("SYNTHETIC_HOME_DAILY", 143);
+		profile.put("clinicianEstimatedDueDate", LocalDate.now(BUSINESS_ZONE).plusDays(134).toString());
+		profileAttempt(member, profile, 201);
 		JsonNode home = getJson("/api/v1/me/home", member.token(), 200);
 
 		assertAll(
+				() -> assertThat(home.at("/data/gestationalAgeWeeks").asInt()).isEqualTo(20),
+				() -> assertThat(home.at("/data/gestationalAgeDays").asInt()).isEqualTo(6),
+				() -> assertThat(home.at("/data/gestationalAgeDisplay").asText()).isEqualTo("20周+6天"),
+				() -> assertThat(home.at("/data/daysUntilEstimatedDueDate").asInt()).isEqualTo(134),
 				() -> assertThat(home.at("/data/contents")).hasSize(2),
 				() -> assertThat(home.at("/data/contents/0/contentId").asText()).isEqualTo(currentBaby.contentId()),
-				() -> assertThat(home.at("/data/contents/0/slotCode").asText()).isEqualTo("P20D3_BABY_CHANGE"),
+				() -> assertThat(home.at("/data/contents/0/slotCode").asText()).isEqualTo("P20D6_BABY_CHANGE"),
 				() -> assertThat(home.at("/data/contents/0/contentTypeCode").asText()).isEqualTo("BABY_CHANGE"),
 				() -> assertThat(home.at("/data/contents/1/contentId").asText()).isEqualTo(currentMom.contentId()),
-				() -> assertThat(home.at("/data/contents/1/slotCode").asText()).isEqualTo("P20D3_MOM_CHANGE"),
+				() -> assertThat(home.at("/data/contents/1/slotCode").asText()).isEqualTo("P20D6_MOM_CHANGE"),
 				() -> assertThat(home.at("/data/contents/1/contentTypeCode").asText()).isEqualTo("MOM_CHANGE"),
+				() -> assertThat(home.at("/data/contents").toString()).doesNotContain(staleBaby.contentId())
+						.doesNotContain(staleMom.contentId()),
 				() -> assertThat(home.at("/data/contents").toString()).doesNotContain("authorActorId")
 						.doesNotContain("reviewerActorId").doesNotContain("status"));
 	}
@@ -856,7 +882,8 @@ class ServiceContractIntegrationTests {
 		assertThat(login.at("/data/role").asText()).isEqualTo(role.name());
 		assertThat(login.at("/data/profileStatus").asText()).isEqualTo("REQUIRED");
 		assertThat(count("synthetic_session")).isEqualTo(sessionsBefore + 1);
-		return new Operator(accountId, login.at("/data/sessionToken").asText(), role);
+		return new Operator(accountId, login.at("/data/sessionToken").asText(), role,
+				login.at("/data/accountDisplayId").asText());
 	}
 
 	private Member defaultPerson() throws Exception {
@@ -871,7 +898,8 @@ class ServiceContractIntegrationTests {
 	private Member personSession(String personReference) throws Exception {
 		JsonNode result = postIdentity(Map.of(), IDENTITY_PROVIDER, personReference, IDENTITY_ASSERTION,
 				"127.0.0.1", 201);
-		return new Member(result.at("/data/personId").asText(), result.at("/data/sessionToken").asText());
+		return new Member(result.at("/data/personId").asText(), result.at("/data/sessionToken").asText(),
+				result.at("/data/userDisplayId").asText());
 	}
 
 	private String createProfile(Member member, String alias) throws Exception {
@@ -1154,10 +1182,10 @@ class ServiceContractIntegrationTests {
 		return UUID.randomUUID().toString().replace("-", "").substring(0, 10);
 	}
 
-	private record Member(String personId, String token) {
+	private record Member(String personId, String token, String displayId) {
 	}
 
-	private record Operator(String accountId, String token, AccountRole role) {
+	private record Operator(String accountId, String token, AccountRole role, String displayId) {
 	}
 
 	private record PublishedContent(String contentId, String versionId) {

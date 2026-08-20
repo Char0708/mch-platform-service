@@ -1,5 +1,7 @@
 package io.github.char0708.mch.platform.home;
 
+import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 
 import org.springframework.stereotype.Service;
@@ -26,11 +28,16 @@ public class HomeService {
 		List<ContentService.HomePublishedContentView> contents = contentService.findPublishedDailyChanges(
 				profile.stageCode(), profile.gestationalAgeWeeks(), profile.gestationalAgeDays());
 		WeightService.WeightTimeline weights = weightService.timeline(personId, profile.subjectId());
+		int daysUntilEstimatedDueDate = Math.toIntExact(ChronoUnit.DAYS.between(
+				LocalDate.parse(profile.gestationalAgeAsOfDate()), LocalDate.parse(profile.estimatedDueDate())));
 		return new HomeView(profile.subjectId(), profile.stageCode(), profile.stageBusinessTime(),
-				contents, weights.latestWeight(), weights.trend());
+				profile.gestationalAgeWeeks(), profile.gestationalAgeDays(), profile.gestationalAgeDisplay(),
+				daysUntilEstimatedDueDate, contents, weights.latestWeight(), weights.trend());
 	}
 
 	public record HomeView(String subjectId, String stageCode, String stageBusinessTime,
+			Integer gestationalAgeWeeks, Integer gestationalAgeDays, String gestationalAgeDisplay,
+			int daysUntilEstimatedDueDate,
 			List<ContentService.HomePublishedContentView> contents, WeightService.WeightView latestWeight,
 			List<WeightService.WeightView> trend) {
 	}
