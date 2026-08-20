@@ -395,6 +395,30 @@ public class ContentService {
 				.list();
 	}
 
+	public List<HomePublishedContentView> findPublishedDailyChanges(String stageCode, int pregnancyWeek,
+			int dayOffset) {
+		return jdbcClient.sql("""
+				SELECT i.content_id, v.version_id, v.version_number, v.title, v.body, v.target_stage_code,
+				       s.slot_code, s.content_type_code, v.synthetic_display_label, v.published_at
+				FROM r1_content_slot s
+				JOIN content_item i ON i.content_id = s.content_id
+				JOIN content_version v ON v.version_id = i.current_published_version_id
+				WHERE v.status = 'PUBLISHED' AND v.target_stage_code = :stageCode
+				  AND s.pregnancy_week = :pregnancyWeek AND s.day_offset = :dayOffset
+				ORDER BY CASE s.content_type_code WHEN 'BABY_CHANGE' THEN 0 ELSE 1 END
+				""")
+				.param("stageCode", stageCode)
+				.param("pregnancyWeek", pregnancyWeek)
+				.param("dayOffset", dayOffset)
+				.query((resultSet, rowNumber) -> new HomePublishedContentView(
+						resultSet.getString("content_id"), resultSet.getString("version_id"),
+						resultSet.getInt("version_number"), resultSet.getString("title"),
+						resultSet.getString("body"), resultSet.getString("target_stage_code"),
+						resultSet.getString("slot_code"), resultSet.getString("content_type_code"),
+						resultSet.getString("synthetic_display_label"), instant(resultSet, "published_at")))
+				.list();
+	}
+
 	public PublishedContentView getPublished(String contentId, String stageCode) {
 		return jdbcClient.sql(publishedSelect() + " WHERE i.content_id = :contentId AND v.status = 'PUBLISHED' AND v.target_stage_code = :stageCode")
 				.param("contentId", contentId)
@@ -637,6 +661,11 @@ public class ContentService {
 
 	public record PublishedContentView(String contentId, String versionId, int versionNumber, String title, String body,
 			String targetStageCode, String syntheticDisplayLabel, String publishedAt) {
+	}
+
+	public record HomePublishedContentView(String contentId, String versionId, int versionNumber, String title,
+			String body, String targetStageCode, String slotCode, String contentTypeCode,
+			String syntheticDisplayLabel, String publishedAt) {
 	}
 
 	public record ContentSlotView(String slotCode, int pregnancyWeek, int dayOffset, String contentTypeCode,

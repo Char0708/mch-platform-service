@@ -23,14 +23,15 @@ public class HomeService {
 
 	public HomeView load(String personId) {
 		ProfileService.ProfileView profile = profileService.requireProfile(personId);
-		List<ContentService.PublishedContentView> contents = contentService.findPublishedForStage(profile.stageCode());
+		List<ContentService.HomePublishedContentView> contents = contentService.findPublishedDailyChanges(
+				profile.stageCode(), profile.gestationalAgeWeeks(), profile.gestationalAgeDays());
 		WeightService.WeightTimeline weights = weightService.timeline(personId, profile.subjectId());
 		return new HomeView(profile.subjectId(), profile.stageCode(), profile.stageBusinessTime(),
 				contents, weights.latestWeight(), weights.trend());
 	}
 
 	public record HomeView(String subjectId, String stageCode, String stageBusinessTime,
-			List<ContentService.PublishedContentView> contents, WeightService.WeightView latestWeight,
+			List<ContentService.HomePublishedContentView> contents, WeightService.WeightView latestWeight,
 			List<WeightService.WeightView> trend) {
 	}
 }

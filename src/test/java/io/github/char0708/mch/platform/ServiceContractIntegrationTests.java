@@ -96,7 +96,8 @@ class ServiceContractIntegrationTests {
 	void auto001NormalServiceVerticalSlicePublishingAndWeight() throws Exception {
 		Operator editor = operator(AccountRole.CONTENT_EDITOR);
 		Operator reviewer = operator(AccountRole.CONTENT_REVIEWER);
-		PublishedContent content = publishContent(editor, reviewer, "合成阶段生活记录", "纯合成日常记录示例");
+		PublishedContent content = publishContentAtSlot(editor, reviewer, "合成阶段生活记录", "纯合成日常记录示例",
+				"P20D3_BABY_CHANGE");
 		Member member = defaultPerson();
 		String subjectId = createProfile(member, "SYNTHETIC_ALPHA");
 
@@ -120,6 +121,56 @@ class ServiceContractIntegrationTests {
 		assertAll(
 				() -> assertThat(home.at("/data/latestWeight/value").asText()).isEqualTo("60.0"),
 				() -> assertThat(contentStatus(content.versionId())).isEqualTo("PUBLISHED"));
+	}
+
+	@Test
+	void r1HomeReturnsOnlyTheCurrentGestationalDaysPublishedBabyAndMomChanges() throws Exception {
+		Operator editor = operator(AccountRole.CONTENT_EDITOR);
+		Operator reviewer = operator(AccountRole.CONTENT_REVIEWER);
+		PublishedContent currentBaby = publishContentAtSlot(editor, reviewer,
+				"20周第4天宝宝变化", "纯合成宝宝变化内容，用于当前孕周日首页展示。", "P20D3_BABY_CHANGE");
+		PublishedContent currentMom = publishContentAtSlot(editor, reviewer,
+				"20周第4天妈妈变化", "纯合成妈妈变化内容，用于当前孕周日首页展示。", "P20D3_MOM_CHANGE");
+		publishContentAtSlot(editor, reviewer,
+				"20周第3天宝宝变化", "纯合成其他日期内容，不应出现在当前首页。", "P20D2_BABY_CHANGE");
+
+		Member member = defaultPerson();
+		createProfile(member, "SYNTHETIC_HOME_DAILY");
+		JsonNode home = getJson("/api/v1/me/home", member.token(), 200);
+
+		assertAll(
+				() -> assertThat(home.at("/data/contents")).hasSize(2),
+				() -> assertThat(home.at("/data/contents/0/contentId").asText()).isEqualTo(currentBaby.contentId()),
+				() -> assertThat(home.at("/data/contents/0/slotCode").asText()).isEqualTo("P20D3_BABY_CHANGE"),
+				() -> assertThat(home.at("/data/contents/0/contentTypeCode").asText()).isEqualTo("BABY_CHANGE"),
+				() -> assertThat(home.at("/data/contents/1/contentId").asText()).isEqualTo(currentMom.contentId()),
+				() -> assertThat(home.at("/data/contents/1/slotCode").asText()).isEqualTo("P20D3_MOM_CHANGE"),
+				() -> assertThat(home.at("/data/contents/1/contentTypeCode").asText()).isEqualTo("MOM_CHANGE"),
+				() -> assertThat(home.at("/data/contents").toString()).doesNotContain("authorActorId")
+						.doesNotContain("reviewerActorId").doesNotContain("status"));
+	}
+
+	@Test
+	void r1HomeOmitsAnUnpublishedCurrentSlotAndKeepsThePublishedSide() throws Exception {
+		Operator editor = operator(AccountRole.CONTENT_EDITOR);
+		Operator reviewer = operator(AccountRole.CONTENT_REVIEWER);
+		PublishedContent currentBaby = publishContentAtSlot(editor, reviewer,
+				"20周第5天宝宝变化", "宝宝今天继续成长，保持日常观察。", "P20D4_BABY_CHANGE");
+		PublishedContent unpublishedMom = createDraftAtSlot(editor,
+				"20周第5天妈妈变化", "妈妈今天的内容仍在复核前，不应公开。", "P20D4_MOM_CHANGE");
+		publishContentAtSlot(editor, reviewer,
+				"20周第4天妈妈变化", "这是前一天已经发布的妈妈变化。", "P20D3_MOM_CHANGE");
+
+		Member member = defaultPerson();
+		profileAttempt(member, profilePayload("SYNTHETIC_HOME_ONE_SIDE", 144), 201);
+		JsonNode home = getJson("/api/v1/me/home", member.token(), 200);
+
+		assertAll(
+				() -> assertThat(home.at("/data/contents")).hasSize(1),
+				() -> assertThat(home.at("/data/contents/0/contentId").asText()).isEqualTo(currentBaby.contentId()),
+				() -> assertThat(home.at("/data/contents/0/contentTypeCode").asText()).isEqualTo("BABY_CHANGE"),
+				() -> assertThat(home.at("/data/contents").toString()).doesNotContain(unpublishedMom.contentId())
+						.doesNotContain("DRAFT"));
 	}
 
 	@Test
@@ -852,6 +903,24 @@ class ServiceContractIntegrationTests {
 		review(reviewer, content, "APPROVE");
 		publish(reviewer, content);
 		return content;
+	}
+
+	private PublishedContent publishContentAtSlot(Operator editor, Operator reviewer, String title, String body,
+			String slotCode) throws Exception {
+		PublishedContent content = createDraftAtSlot(editor, title, body, slotCode);
+		submit(editor, content);
+		review(reviewer, content, "APPROVE");
+		publish(reviewer, content);
+		return content;
+	}
+
+	private PublishedContent createDraftAtSlot(Operator editor, String title, String body, String slotCode)
+			throws Exception {
+		JsonNode result = postJson("/api/v1/ops/contents", Map.of(
+				"title", title, "body", body, "targetStageCode", STAGE,
+				"contentBasis", "SYNTHETIC_DEMO", "slotCode", slotCode), key(), editor.token(), 201);
+		return new PublishedContent(result.at("/data/contentId").asText(),
+				result.at("/data/versionId").asText());
 	}
 
 	private PublishedContent createDraft(Operator editor, String title, String body) throws Exception {
